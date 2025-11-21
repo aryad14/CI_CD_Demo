@@ -1,0 +1,105 @@
+version: "3.9"
+
+services:
+  ###############################################
+  # USERS SERVICE (FASTAPI)
+  ###############################################
+  users_service:
+    build:
+      context: ./services/users_service
+    container_name: users_service
+    ports:
+      - "8001:8000"
+    env_file:
+      - ./services/users_service/.env
+    depends_on:
+      - users-db
+    volumes:
+      - ./services/users_service/app:/app/app   # live reload mount
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--reload"]
+
+
+  ###############################################
+  # USERS DATABASE (MySQL)
+  ###############################################
+  users-db:
+    image: mysql:8
+    container_name: users-db
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: usersdb
+    ports:
+      - "3308:3306"
+    volumes:
+      - users_db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+
+  ###############################################
+  # ORDERS SERVICE (SPRING BOOT)
+  ###############################################
+  orders_service:
+    build:
+      context: ./services/orders_service
+      # target: build    # for dev you can switch to build or a dev stage
+    container_name: orders_service
+    ports:
+      - "8081:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://orders-db:3306/ordersdb
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+    depends_on:
+      - orders-db
+
+
+  ###############################################
+  # ORDERS DATABASE (MySQL)
+  ###############################################
+  orders-db:
+    image: mysql:8
+    container_name: orders-db
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: ordersdb
+    ports:
+      - "3309:3306"
+    volumes:
+      - orders_db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+
+  ###############################################
+  # FRONTEND (REACT + HOT RELOAD)
+  ###############################################
+  frontend:
+    build:
+      context: ./www
+      target: dev
+    container_name: www
+    working_dir: /app
+    ports:
+      - "3000:5173"
+    volumes:
+      - ./www:/app
+      - /app/node_modules
+    command: ["npm", "run", "dev", "--", "--host"]
+    depends_on:
+      - users_service
+      - orders_service
+
+
+###############################################
+# PERSISTENT VOLUMES
+###############################################
+volumes:
+  users_db_data:
+  orders_db_data:

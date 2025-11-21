@@ -1,5 +1,5 @@
 # Python
-services/users_service/__pycache__/
+services/users_service/*/__pycache__/
 services/users_service/.pytest_cache/
 services/users_service/*.pyc
 services/users_service/env/
@@ -23,7 +23,6 @@ frontend/.vite/
 *~ 
 docker-data/
 **/tmp/
-**/.dockerignore
 **/.env
 **/.env.* 
 .env
