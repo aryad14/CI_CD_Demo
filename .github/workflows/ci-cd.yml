@@ -1,0 +1,123 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    services:
+      mysql-users:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: usersdb
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping --silent" --health-interval=10s --health-timeout=5s --health-retries=5
+      mysql-orders:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: ordersdb
+        ports:
+          - 3307:3306
+        options: --health-cmd="mysqladmin ping --silent" --health-interval=10s --health-timeout=5s --health-retries=5
+
+    env:
+      DATABASE_URL: mysql+pymysql://root:root@127.0.0.1:3306/usersdb
+      SPRING_DATASOURCE_URL: jdbc:mysql://127.0.0.1:3307/ordersdb
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # USERS SERVICE (Python)
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        working-directory: services/users_service
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Python tests (if any)
+        working-directory: services/users_service
+        run: |
+          if [ -d "tests" ]; then pytest; else echo "No tests directory"; fi
+
+      # ORDERS SERVICE (Java)
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Build Java project
+        working-directory: services/orders_service
+        run: mvn clean package -B -DskipTests
+
+      - name: Run Java tests
+        working-directory: services/orders_service
+        run: mvn test -B
+
+      # FRONTEND (Node)
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install frontend dependencies
+        working-directory: www
+        run: npm ci
+
+      - name: Lint frontend
+        working-directory: www
+        run: npm run lint
+
+      - name: Build frontend
+        working-directory: www
+        run: npm run build
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Build Docker images for each service
+      - name: Build users_service Docker image
+        run: docker build -t users-service:ci ./services/users_service
+
+      - name: Build orders_service Docker image
+        run: docker build -t orders-service:ci ./services/orders_service
+
+      - name: Build frontend Docker image
+        run: docker build -t frontend:ci ./www
+
+      # Optionally push images to Docker Hub or GHCR
+      # - name: Log in to Docker Hub
+      #   uses: docker/login-action@v3
+      #   with:
+      #     username: ${{ secrets.DOCKERHUB_USERNAME }}
+      #     password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # - name: Push users_service image
+      #   run: docker push yourdockerhub/users-service:ci
+
+      # - name: Push orders_service image
+      #   run: docker push yourdockerhub/orders-service:ci
+
+      # - name: Push frontend image
+      #   run: docker push yourdockerhub/frontend:ci
+
+  # Add a deploy job here if needed, e.g. to Kubernetes, ECS, etc.
