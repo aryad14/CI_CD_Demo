@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+pydantic
+sqlalchemy
+psycopg2-binary   # if using PostgreSQL
+pymysql           # if using MySQL
